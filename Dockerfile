@@ -3,7 +3,8 @@ FROM openjdk:8-jdk
 RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*
 
 ENV JENKINS_HOME /var/jenkins_home
-ENV JENKINS_SLAVE_AGENT_PORT 50001
+ENV JENKINS_SLAVE_AGENT_PORT 50000
+ENV DEBIAN_FRONTEND=noninteractive
 
 ARG user=jenkins
 ARG group=jenkins
@@ -36,18 +37,18 @@ COPY init.groovy /usr/share/jenkins/ref/init.groovy.d/tcp-slave-agent-port.groov
 
 # jenkins version being bundled in this docker image
 ARG JENKINS_VERSION
-ENV JENKINS_VERSION ${JENKINS_VERSION:-2.46.2}
+ENV JENKINS_VERSION ${JENKINS_VERSION:-2.80}
 
 # jenkins.war checksum, download will be validated using it
-ARG JENKINS_SHA=aa7f243a4c84d3d6cfb99a218950b8f7b926af7aa2570b0e1707279d464472c7
+ARG JENKINS_SHA=69a84b894ad03518a66ffef6f63e289476a35a15e0ff186f0ab70f17b87a2a88
 
 # Can be used to customize where jenkins.war get downloaded from
 ARG JENKINS_URL=https://repo.jenkins-ci.org/public/org/jenkins-ci/main/jenkins-war/${JENKINS_VERSION}/jenkins-war-${JENKINS_VERSION}.war
 
 # could use ADD but this one does not check Last-Modified header neither does it allow to control checksum 
 # see https://github.com/docker/docker/issues/8331
-RUN curl -fsSL ${JENKINS_URL} -o /usr/share/jenkins/jenkins.war \
-  && echo "${JENKINS_SHA}  /usr/share/jenkins/jenkins.war" | sha256sum -c -
+# get jenkins hashes from http://mirrors.jenkins.io/war/${JENKINS_VERSION}/jenkins.war.sha256
+RUN curl -fsSL ${JENKINS_URL} -o /usr/share/jenkins/jenkins.war && echo "${JENKINS_SHA}  /usr/share/jenkins/jenkins.war" | sha256sum -c -
 
 ENV JENKINS_UC https://updates.jenkins.io
 RUN chown -R ${user} "$JENKINS_HOME" /usr/share/jenkins/ref
@@ -69,30 +70,3 @@ ENTRYPOINT ["/bin/tini", "--", "/usr/local/bin/jenkins.sh"]
 # from a derived Dockerfile, can use `RUN plugins.sh active.txt` to setup /usr/share/jenkins/ref/plugins from a support bundle
 COPY plugins.sh /usr/local/bin/plugins.sh
 COPY install-plugins.sh /usr/local/bin/install-plugins.sh
-
-USER root
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install Python Tools
-RUN apt-get update && apt-get install -y --no-install-recommends apt-utils
-RUN apt-get install -y apt-utils
-RUN apt-get -y install apt-transport-https
-RUN apt-get -y install python-software-properties
-RUN apt-get install -y python-setuptools
-RUN apt-get install -y python-pip
-RUN pip install --upgrade pip
-RUN pip install --upgrade setuptools
-RUN pip install wheel
-RUN pip install python2
-
-# Install ZATO API Testing Framewrok
-USER root
-RUN apt-get install -y libpq-dev libxml2-dev libxslt1-dev python-dev libyaml-dev
-RUN mkdir -p /home/zato-apitest/
-RUN git clone https://github.com/yodaqua/zato-apitest.git /zato-apitest/
-RUN cp -R /zato-apitest/* /home/zato-apitest/
-RUN pip install 'six==1.6.1'
-RUN pip install 'nose==1.3.3'
-RUN chown root:root -R /home/zato-apitest/ && cd /home/zato-apitest/ && pip install -r requirements.txt
-RUN pip install zato-apitest
-RUN pip install -U requests
